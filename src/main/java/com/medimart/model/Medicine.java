@@ -36,15 +36,19 @@ public class Medicine {
     @Column(name = "image_path")
     private String imagePath;
 
-    /* Discount configuration */
+    /* =======================
+       Discount configuration
+       ======================= */
+
     @Column(name = "discount_type")
     private String discountType;   // PERCENT or FLAT
 
     @Column(name = "discount_value")
     private double discountValue;
 
+    // ✅ FIX: Boolean instead of boolean (NULL-safe)
     @Column(name = "discount_active")
-    private boolean discountActive;
+    private Boolean discountActive;
 
     @Column(name = "discount_start")
     private String discountStart;
@@ -52,15 +56,31 @@ public class Medicine {
     @Column(name = "discount_end")
     private String discountEnd;
 
-    // optional helper
-    public double getFinalPrice() {
-        if (!discountActive) return price;
+    /* =======================
+       SAFE GETTERS
+       ======================= */
 
-        String type = discountType == null ? "" : discountType.trim().toUpperCase();
+    public boolean isDiscountActive() {
+        return Boolean.TRUE.equals(discountActive);
+    }
+
+    /* =======================
+       FINAL PRICE (OPTIONAL)
+       ======================= */
+    public double getFinalPrice() {
+        if (!isDiscountActive()) return price;
+
+        String type = discountType == null
+                ? ""
+                : discountType.trim().toUpperCase();
 
         double discount = 0.0;
-        if ("PERCENT".equals(type)) discount = price * (discountValue / 100.0);
-        else if ("FLAT".equals(type)) discount = discountValue;
+
+        if ("PERCENT".equals(type)) {
+            discount = price * (discountValue / 100.0);
+        } else if ("FLAT".equals(type)) {
+            discount = discountValue;
+        }
 
         discount = Math.min(discount, price);
         return Math.max(0.0, price - discount);
