@@ -36,15 +36,12 @@ public class Medicine {
     @Column(name = "image_path")
     private String imagePath;
 
-    /* =======================
-       Discount configuration
-       ======================= */
-
+    /* Discount configuration */
     @Column(name = "discount_type")
     private String discountType;   // PERCENT or FLAT
 
     @Column(name = "discount_value")
-    private double discountValue;  // percentage (10) or flat (50)
+    private double discountValue;
 
     @Column(name = "discount_active")
     private boolean discountActive;
@@ -55,30 +52,17 @@ public class Medicine {
     @Column(name = "discount_end")
     private String discountEnd;
 
-    // ✅ Explicit method so compiler will ALWAYS find it (even if Lombok fails)
-    public boolean isDiscountActive() {
-        return discountActive;
-    }
-
-    // ✅ Optional: calculate discounted selling price
+    // optional helper
     public double getFinalPrice() {
-        if (!isDiscountActive()) return price;
+        if (!discountActive) return price;
 
-        String type = (discountType == null) ? "" : discountType.trim().toUpperCase();
+        String type = discountType == null ? "" : discountType.trim().toUpperCase();
 
-        if ("PERCENT".equals(type)) {
-            double pct = discountValue;     // e.g. 10 means 10%
-            if (pct <= 0) return price;
-            double discounted = price - (price * (pct / 100.0));
-            return Math.max(0.0, discounted);
-        }
+        double discount = 0.0;
+        if ("PERCENT".equals(type)) discount = price * (discountValue / 100.0);
+        else if ("FLAT".equals(type)) discount = discountValue;
 
-        if ("FLAT".equals(type)) {
-            double flat = discountValue;    // e.g. 50 means 50 টাকা off
-            if (flat <= 0) return price;
-            return Math.max(0.0, price - flat);
-        }
-
-        return price;
+        discount = Math.min(discount, price);
+        return Math.max(0.0, price - discount);
     }
 }

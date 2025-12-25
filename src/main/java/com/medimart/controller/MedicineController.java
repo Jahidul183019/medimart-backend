@@ -41,48 +41,43 @@ public class MedicineController {
     public List<MedicineDto> getAll() {
         return medicineService.getAll()
                 .stream()
-                .map(this::toDto)
+                .map(MedicineDto::fromEntity)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<MedicineDto> getOne(@PathVariable Long id) {
         return medicineService.getById(id)
-                .map(m -> ResponseEntity.ok(toDto(m)))
+                .map(m -> ResponseEntity.ok(MedicineDto.fromEntity(m)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /* ==========================
-       CREATE (JSON – DEFAULT)
+       CREATE (JSON)
        ========================== */
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> create(@RequestBody Medicine med) {
 
-        // Box values so it compiles whether entity uses primitive or wrapper
-        Double price = med.getPrice();
-        Integer qty = med.getQuantity();
-        Double buy = med.getBuyPrice();
-
-        // basic validation
-        if (price == null || price <= 0)
+        if (med.getPrice() <= 0) {
             return ResponseEntity.badRequest().body("Price must be > 0");
+        }
 
-        if (qty == null || qty < 0) med.setQuantity(0);
+        if (med.getQuantity() < 0) med.setQuantity(0);
+        if (med.getBuyPrice() < 0) med.setBuyPrice(0.0);
 
-        if (buy == null || buy < 0) med.setBuyPrice(0.0);
-
-        if (med.getBuyPrice() > med.getPrice())
+        if (med.getBuyPrice() > med.getPrice()) {
             return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
+        }
 
         normalizeDiscount(med);
 
         Medicine saved = medicineService.create(med);
-        return ResponseEntity.ok(toDto(saved));
+        return ResponseEntity.ok(MedicineDto.fromEntity(saved));
     }
 
     /* ==========================
-       CREATE (MULTIPART – IMAGE)
+       CREATE (MULTIPART)
        ========================== */
 
     @PostMapping(path = "/multipart", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -103,23 +98,18 @@ public class MedicineController {
             @RequestPart(required = false) MultipartFile image
     ) throws IOException {
 
-        if (price <= 0)
-            return ResponseEntity.badRequest().body("Price must be > 0");
+        if (price <= 0) return ResponseEntity.badRequest().body("Price must be > 0");
+        if (quantity < 0) return ResponseEntity.badRequest().body("Quantity must be >= 0");
 
-        if (quantity < 0)
-            return ResponseEntity.badRequest().body("Quantity must be >= 0");
-
-        if (buyPrice != null && buyPrice < 0)
-            return ResponseEntity.badRequest().body("Buy Price must be >= 0");
-
-        if (buyPrice != null && buyPrice > price)
-            return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
+        double buy = (buyPrice != null ? buyPrice : 0.0);
+        if (buy < 0) return ResponseEntity.badRequest().body("Buy Price must be >= 0");
+        if (buy > price) return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
 
         Medicine med = new Medicine();
         med.setName(name);
         med.setCategory(category);
         med.setPrice(price);
-        med.setBuyPrice(buyPrice != null ? buyPrice : 0.0);
+        med.setBuyPrice(buy);
         med.setQuantity(quantity);
         med.setExpiryDate(expiryDate);
 
@@ -130,31 +120,36 @@ public class MedicineController {
         }
 
         Medicine saved = medicineService.create(med);
-        return ResponseEntity.ok(toDto(saved));
+        return ResponseEntity.ok(MedicineDto.fromEntity(saved));
     }
 
     /* ==========================
-       UPDATE (JSON – DEFAULT)
+       UPDATE (JSON)
        ========================== */
 
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Medicine updated) {
 
-        // if price is missing in JSON, it may default to 0 for primitives – protect that
-        Double price = updated.getPrice();
-        if (price != null && price <= 0) {
+        if (updated.getPrice() <= 0) {
             return ResponseEntity.badRequest().body("Price must be > 0");
+        }
+
+        if (updated.getQuantity() < 0) updated.setQuantity(0);
+        if (updated.getBuyPrice() < 0) updated.setBuyPrice(0.0);
+
+        if (updated.getBuyPrice() > updated.getPrice()) {
+            return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
         }
 
         normalizeDiscount(updated);
 
         return medicineService.update(id, updated)
-                .map(m -> ResponseEntity.ok(toDto(m)))
+                .map(m -> ResponseEntity.ok(MedicineDto.fromEntity(m)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /* ==========================
-       UPDATE (MULTIPART – IMAGE)
+       UPDATE (MULTIPART)
        ========================== */
 
     @PutMapping(path = "/{id}/multipart", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -180,24 +175,18 @@ public class MedicineController {
         Optional<Medicine> opt = medicineService.getById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
 
-        if (price <= 0)
-            return ResponseEntity.badRequest().body("Price must be > 0");
+        if (price <= 0) return ResponseEntity.badRequest().body("Price must be > 0");
+        if (quantity < 0) return ResponseEntity.badRequest().body("Quantity must be >= 0");
 
-        if (quantity < 0)
-            return ResponseEntity.badRequest().body("Quantity must be >= 0");
-
-        if (buyPrice != null && buyPrice < 0)
-            return ResponseEntity.badRequest().body("Buy Price must be >= 0");
-
-        if (buyPrice != null && buyPrice > price)
-            return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
+        double buy = (buyPrice != null ? buyPrice : opt.get().getBuyPrice());
+        if (buy < 0) return ResponseEntity.badRequest().body("Buy Price must be >= 0");
+        if (buy > price) return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
 
         Medicine existing = opt.get();
-
         existing.setName(name);
         existing.setCategory(category);
         existing.setPrice(price);
-        existing.setBuyPrice(buyPrice != null ? buyPrice : existing.getBuyPrice());
+        existing.setBuyPrice(buy);
         existing.setQuantity(quantity);
         existing.setExpiryDate(expiryDate);
 
@@ -208,7 +197,7 @@ public class MedicineController {
         }
 
         return medicineService.update(id, existing)
-                .map(m -> ResponseEntity.ok(toDto(m)))
+                .map(m -> ResponseEntity.ok(MedicineDto.fromEntity(m)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -223,18 +212,11 @@ public class MedicineController {
     }
 
     /* ==========================
-       DISCOUNT HELPERS (COMPILER-SAFE)
+       DISCOUNT HELPERS
        ========================== */
 
     private void normalizeDiscount(Medicine m) {
-        // Works whether isDiscountActive() returns boolean OR Boolean
-        Boolean activeObj = m.isDiscountActive();
-        boolean active = Boolean.TRUE.equals(activeObj);
-
-        Double priceObj = m.getPrice();
-        double price = (priceObj != null ? priceObj : 0.0);
-
-        if (!active) {
+        if (!m.isDiscountActive()) {
             m.setDiscountActive(false);
             m.setDiscountType(null);
             m.setDiscountValue(0.0);
@@ -246,11 +228,9 @@ public class MedicineController {
         String type = (m.getDiscountType() == null ? "PERCENT" : m.getDiscountType().toUpperCase());
         if (!type.equals("PERCENT") && !type.equals("FLAT")) type = "PERCENT";
 
-        Double valObj = m.getDiscountValue();
-        double val = Math.max(0.0, valObj != null ? valObj : 0.0);
-
+        double val = Math.max(0.0, m.getDiscountValue());
         if (type.equals("PERCENT") && val > 100) val = 100;
-        if (type.equals("FLAT") && val > price) val = price;
+        if (type.equals("FLAT") && val > m.getPrice()) val = m.getPrice();
 
         m.setDiscountActive(true);
         m.setDiscountType(type);
@@ -275,58 +255,8 @@ public class MedicineController {
     }
 
     /* ==========================
-       DTO + FINAL PRICE (SAFE)
+       FILE UPLOAD
        ========================== */
-
-    private MedicineDto toDto(Medicine m) {
-        MedicineDto dto = new MedicineDto();
-        dto.setId(m.getId());
-        dto.setName(m.getName());
-        dto.setCategory(m.getCategory());
-
-        dto.setPrice(m.getPrice());
-        dto.setBuyPrice(m.getBuyPrice());
-        dto.setQuantity(m.getQuantity());
-        dto.setExpiryDate(m.getExpiryDate());
-        dto.setImagePath(m.getImagePath());
-
-        Boolean activeObj = m.isDiscountActive();
-        dto.setDiscountActive(Boolean.TRUE.equals(activeObj));
-        dto.setDiscountType(m.getDiscountType());
-        dto.setDiscountValue(m.getDiscountValue());
-        dto.setDiscountStart(m.getDiscountStart());
-        dto.setDiscountEnd(m.getDiscountEnd());
-
-        dto.setFinalPrice(calcFinalPrice(m));
-        return dto;
-    }
-
-    private double calcFinalPrice(Medicine m) {
-        Double priceObj = m.getPrice();
-        double price = (priceObj != null ? priceObj : 0.0);
-
-        boolean active = Boolean.TRUE.equals(m.isDiscountActive());
-        if (!active) return round2(price);
-
-        Double discValObj = m.getDiscountValue();
-        double discVal = (discValObj != null ? discValObj : 0.0);
-
-        String type = (m.getDiscountType() != null ? m.getDiscountType() : "PERCENT");
-
-        double discount = 0.0;
-        if ("PERCENT".equalsIgnoreCase(type)) {
-            discount = (price * discVal) / 100.0;
-        } else if ("FLAT".equalsIgnoreCase(type)) {
-            discount = discVal;
-        }
-
-        discount = Math.min(discount, price);
-        return round2(price - discount);
-    }
-
-    private double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
 
     private String storeImageFile(MultipartFile image) throws IOException {
         Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();

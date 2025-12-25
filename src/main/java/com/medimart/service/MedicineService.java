@@ -1,5 +1,6 @@
 package com.medimart.service;
 
+import com.medimart.dto.MedicineDto;
 import com.medimart.model.Medicine;
 import com.medimart.repository.MedicineRepository;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class MedicineService {
@@ -72,7 +74,7 @@ public class MedicineService {
 
         if (!m.isDiscountActive()) {
             m.setDiscountType(null);
-            m.setDiscountValue(0.0);     // ✅ was 0
+            m.setDiscountValue(0.0);
             m.setDiscountStart(null);
             m.setDiscountEnd(null);
             return;
@@ -85,15 +87,25 @@ public class MedicineService {
             m.setDiscountType(type.toUpperCase());
         }
 
-        if (m.getDiscountValue() < 0.0) m.setDiscountValue(0.0);  // ✅ was 0
+        if (m.getDiscountValue() < 0.0) m.setDiscountValue(0.0);
 
         if ("PERCENT".equalsIgnoreCase(m.getDiscountType()) && m.getDiscountValue() > 100.0) {
             m.setDiscountValue(100.0);
+        }
+
+        // Optional safety for FLAT discount (prevents negative price)
+        if ("FLAT".equalsIgnoreCase(m.getDiscountType()) && m.getDiscountValue() > m.getPrice()) {
+            m.setDiscountValue(m.getPrice());
         }
     }
 
     private void broadcastInventory() {
         List<Medicine> all = medicineRepository.findAll();
-        messagingTemplate.convertAndSend("/topic/inventory", all);
+
+        List<MedicineDto> payload = all.stream()
+                .map(MedicineDto::fromEntity)
+                .collect(Collectors.toList());
+
+        messagingTemplate.convertAndSend("/topic/inventory", payload);
     }
 }

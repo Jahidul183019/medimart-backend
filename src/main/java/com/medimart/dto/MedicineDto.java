@@ -14,22 +14,22 @@ public class MedicineDto {
     private String name;
     private String category;
 
-    private double price;
-    private double buyPrice;
-    private int quantity;
+    private Double price;
+    private Double buyPrice;
+    private Integer quantity;
 
     private String expiryDate;
     private String imagePath;
 
     // discount fields
     private String discountType;     // "PERCENT" or "FLAT"
-    private double discountValue;
-    private boolean discountActive;
+    private Double discountValue;
+    private Boolean discountActive;
     private String discountStart;
     private String discountEnd;
 
-    // computed field (DTO only)
-    private double finalPrice;
+    // computed (DTO only)
+    private Double finalPrice;
 
     /* ==========================
        ENTITY → DTO
@@ -54,29 +54,8 @@ public class MedicineDto {
         dto.setDiscountStart(m.getDiscountStart());
         dto.setDiscountEnd(m.getDiscountEnd());
 
-        dto.setFinalPrice(calculateFinalPrice(m));
-
+        dto.setFinalPrice(round2(m.getFinalPrice())); // uses entity helper
         return dto;
-    }
-
-    /* ==========================
-       FINAL PRICE CALC
-       ========================== */
-    private static double calculateFinalPrice(Medicine m) {
-        if (!m.isDiscountActive()) {
-            return round2(m.getPrice());
-        }
-
-        double discount = 0.0;
-
-        if ("PERCENT".equalsIgnoreCase(m.getDiscountType())) {
-            discount = (m.getPrice() * m.getDiscountValue()) / 100.0;
-        } else if ("FLAT".equalsIgnoreCase(m.getDiscountType())) {
-            discount = m.getDiscountValue();
-        }
-
-        discount = Math.min(discount, m.getPrice());
-        return round2(m.getPrice() - discount);
     }
 
     private static double round2(double v) {
