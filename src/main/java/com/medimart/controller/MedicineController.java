@@ -59,15 +59,18 @@ public class MedicineController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> create(@RequestBody Medicine med) {
 
+        // Box values so it compiles whether entity uses primitive or wrapper
+        Double price = med.getPrice();
+        Integer qty = med.getQuantity();
+        Double buy = med.getBuyPrice();
+
         // basic validation
-        if (med.getPrice() <= 0)
+        if (price == null || price <= 0)
             return ResponseEntity.badRequest().body("Price must be > 0");
 
-        if (med.getQuantity() < 0)
-            med.setQuantity(0);
+        if (qty == null || qty < 0) med.setQuantity(0);
 
-        if (med.getBuyPrice() < 0)
-            med.setBuyPrice(0.0);
+        if (buy == null || buy < 0) med.setBuyPrice(0.0);
 
         if (med.getBuyPrice() > med.getPrice())
             return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
@@ -135,10 +138,14 @@ public class MedicineController {
        ========================== */
 
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> update(
-            @PathVariable Long id,
-            @RequestBody Medicine updated
-    ) {
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Medicine updated) {
+
+        // if price is missing in JSON, it may default to 0 for primitives – protect that
+        Double price = updated.getPrice();
+        if (price != null && price <= 0) {
+            return ResponseEntity.badRequest().body("Price must be > 0");
+        }
+
         normalizeDiscount(updated);
 
         return medicineService.update(id, updated)
@@ -173,6 +180,18 @@ public class MedicineController {
         Optional<Medicine> opt = medicineService.getById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
 
+        if (price <= 0)
+            return ResponseEntity.badRequest().body("Price must be > 0");
+
+        if (quantity < 0)
+            return ResponseEntity.badRequest().body("Quantity must be >= 0");
+
+        if (buyPrice != null && buyPrice < 0)
+            return ResponseEntity.badRequest().body("Buy Price must be >= 0");
+
+        if (buyPrice != null && buyPrice > price)
+            return ResponseEntity.badRequest().body("Buy Price cannot exceed Selling Price");
+
         Medicine existing = opt.get();
 
         existing.setName(name);
@@ -204,11 +223,18 @@ public class MedicineController {
     }
 
     /* ==========================
-       DISCOUNT HELPERS
+       DISCOUNT HELPERS (COMPILER-SAFE)
        ========================== */
 
     private void normalizeDiscount(Medicine m) {
-        if (!m.isDiscountActive()) {
+        // Works whether isDiscountActive() returns boolean OR Boolean
+        Boolean activeObj = m.isDiscountActive();
+        boolean active = Boolean.TRUE.equals(activeObj);
+
+        Double priceObj = m.getPrice();
+        double price = (priceObj != null ? priceObj : 0.0);
+
+        if (!active) {
             m.setDiscountActive(false);
             m.setDiscountType(null);
             m.setDiscountValue(0.0);
@@ -218,14 +244,13 @@ public class MedicineController {
         }
 
         String type = (m.getDiscountType() == null ? "PERCENT" : m.getDiscountType().toUpperCase());
-        if (!type.equals("PERCENT") && !type.equals("FLAT")) {
-            type = "PERCENT";
-        }
+        if (!type.equals("PERCENT") && !type.equals("FLAT")) type = "PERCENT";
 
-        double val = Math.max(0.0, m.getDiscountValue());
+        Double valObj = m.getDiscountValue();
+        double val = Math.max(0.0, valObj != null ? valObj : 0.0);
 
         if (type.equals("PERCENT") && val > 100) val = 100;
-        if (type.equals("FLAT") && val > m.getPrice()) val = m.getPrice();
+        if (type.equals("FLAT") && val > price) val = price;
 
         m.setDiscountActive(true);
         m.setDiscountType(type);
@@ -250,7 +275,7 @@ public class MedicineController {
     }
 
     /* ==========================
-       DTO + FINAL PRICE
+       DTO + FINAL PRICE (SAFE)
        ========================== */
 
     private MedicineDto toDto(Medicine m) {
@@ -258,13 +283,15 @@ public class MedicineController {
         dto.setId(m.getId());
         dto.setName(m.getName());
         dto.setCategory(m.getCategory());
+
         dto.setPrice(m.getPrice());
         dto.setBuyPrice(m.getBuyPrice());
         dto.setQuantity(m.getQuantity());
         dto.setExpiryDate(m.getExpiryDate());
         dto.setImagePath(m.getImagePath());
 
-        dto.setDiscountActive(m.isDiscountActive());
+        Boolean activeObj = m.isDiscountActive();
+        dto.setDiscountActive(Boolean.TRUE.equals(activeObj));
         dto.setDiscountType(m.getDiscountType());
         dto.setDiscountValue(m.getDiscountValue());
         dto.setDiscountStart(m.getDiscountStart());
@@ -275,17 +302,26 @@ public class MedicineController {
     }
 
     private double calcFinalPrice(Medicine m) {
-        if (!m.isDiscountActive()) return round2(m.getPrice());
+        Double priceObj = m.getPrice();
+        double price = (priceObj != null ? priceObj : 0.0);
+
+        boolean active = Boolean.TRUE.equals(m.isDiscountActive());
+        if (!active) return round2(price);
+
+        Double discValObj = m.getDiscountValue();
+        double discVal = (discValObj != null ? discValObj : 0.0);
+
+        String type = (m.getDiscountType() != null ? m.getDiscountType() : "PERCENT");
 
         double discount = 0.0;
-        if ("PERCENT".equalsIgnoreCase(m.getDiscountType())) {
-            discount = (m.getPrice() * m.getDiscountValue()) / 100.0;
-        } else if ("FLAT".equalsIgnoreCase(m.getDiscountType())) {
-            discount = m.getDiscountValue();
+        if ("PERCENT".equalsIgnoreCase(type)) {
+            discount = (price * discVal) / 100.0;
+        } else if ("FLAT".equalsIgnoreCase(type)) {
+            discount = discVal;
         }
 
-        discount = Math.min(discount, m.getPrice());
-        return round2(m.getPrice() - discount);
+        discount = Math.min(discount, price);
+        return round2(price - discount);
     }
 
     private double round2(double v) {
