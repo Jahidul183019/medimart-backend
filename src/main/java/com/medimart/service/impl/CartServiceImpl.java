@@ -249,12 +249,23 @@ public class CartServiceImpl implements CartService {
 
         int safeQty = quantity <= 0 ? 1 : quantity;
 
-        CartItem item = new CartItem();
-        item.setUserId(userId);
-        item.setMedicineId(medicineId);
-        item.setQuantity(safeQty);
+        Optional<CartItem> existingOpt =
+                repo.findByUserIdAndMedicineId(userId, medicineId);
 
-        repo.save(item);
+        if (existingOpt.isPresent()) {
+            // merge quantity
+            CartItem existing = existingOpt.get();
+            existing.setQuantity(existing.getQuantity() + safeQty);
+            repo.save(existing);
+        } else {
+            // create new cart item
+            CartItem item = new CartItem();
+            item.setUserId(userId);
+            item.setMedicineId(medicineId);
+            item.setQuantity(safeQty);
+            repo.save(item);
+        }
+
         return true;
     }
 
