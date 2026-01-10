@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface CartService {
 
-    List<CartItemDto> getCartByUser(Long userId);   // 👈 DTO here
+    List<CartItemDto> getCartByUser(Long userId); e
 
     boolean addItem(Long userId, Long medicineId, int quantity);
 
