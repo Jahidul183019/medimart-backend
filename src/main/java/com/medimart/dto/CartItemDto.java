@@ -12,7 +12,6 @@ public class CartItemDto {
 
     private String medicineName;
 
-    // ✅ keep this as "base/original price"
     private double medicinePrice;
 
     private String medicineImagePath;
